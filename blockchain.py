@@ -1,16 +1,17 @@
 import hashlib
 import json
-from textwrap import dedent
 from time import time
 from uuid import uuid4
+from urllib.parse import urlparse
 
 from flask import Flask, jsonify, request
-
+import requests
 
 class Blockchain(object):
     def __init__(self):
         self.chain=[]
         self.current_transactions=[]
+        self.nodes = set()
 
         #genesis block 생성
         self.new_block(previous_hash=1, proof=100)
@@ -74,7 +75,7 @@ class Blockchain(object):
         """
 
         #We must make sure that the Dictionary is Ordered, or we'll have inconsistent hashes
-        block_string = json.dumps(block, sork_keys=True).encode()
+        block_string = json.dumps(block, sort_keys = True).encode()
         return hashlib.sha256(block_string).hexdigest()
 
     def proof_of_work(self, last_proof):
@@ -88,7 +89,7 @@ class Blockchain(object):
         """
 
         proof = 0
-        while self.vaild_proof(last_proof, proof) is False:
+        while self.valid_proof(last_proof, proof) is False:
             proof+=1
 
         return proof
@@ -107,6 +108,70 @@ class Blockchain(object):
         guess_hash = hashlib.sha256(guess).hexdigest()
         return guess_hash[:4] == "0000"
 
+    def register_node(self, address):
+        """
+        새로운 노드가 기존의 노드의 list에 등록되는 곳이다
+        'http://172.0.0.1:5002 와 같은 형태로 등록을 요청하면 된다
+        :param address:
+        :return:
+        """
+        parsed_url = urlparse(address)
+        self.nodes.add(parsed_url.netloc)
+
+    def valid_chain(self, chain):
+        """
+        주어진 블록체인이 유효한지를 결정한다.
+        :param chain:
+        :return:
+        """
+
+        last_block = chain[0]
+        current_index = 1
+
+        while current_index < len(chain):
+            block = chain[current_index]
+            print(f'{last_block}')
+            print(f'{block}')
+            print("\n-----------\n")
+
+            if block['previous_hash'] != self.hash(last_block):
+                return False
+
+            if not self.valid_proof(last_block['proof'], block['proof']):
+                return False
+
+            last_block = block
+            current_index += 1
+
+        return True
+
+    def resolve_conflicts(self):
+        """
+        이곳이 합의 알고리즘, 노드 중에서 가장 긴 체인을 가지고 있는 노드의 체인을 유효한 것으로 인정한다.
+        :return:
+        """
+
+        neighbours = self.nodes
+        new_chain = None
+
+        max_length = len(self.chain)
+
+        for node in neighbours:
+            response = requests.get(f'http://{node}/chain')
+
+            if response.status_code == 200:
+                length = response.json()['length']
+                chain = response.json()['chain']
+
+                if length > max_length and self.valid_chain(chain) :
+                    max_length = length
+                    new_chain = chain
+
+            if new_chain:
+                self.chain = new_chain
+                return True
+
+        return False
 
 # Instantiate our Node
 app = Flask(__name__)
@@ -118,7 +183,7 @@ node_identifier = str(uuid4()).replace('-', '')
 blockchain = Blockchain()
 
 
-@app.route('/mine', method = ['GET'])
+@app.route('/mine', methods = ['GET'])
 def mine():
     #다음 블록의 proof 값을 얻어내기 위해 POW 알고리즘을 수행한다.
     last_block = blockchain.last_blcok
@@ -145,6 +210,7 @@ def mine():
         'previous_hash' : block['previous_hash'],
     }
     return jsonify(response), 200
+    #return "We'll mine a new Block
 
 @app.route('/transactions/new', methods = ['POST'])
 def new_transactions():
@@ -160,6 +226,7 @@ def new_transactions():
 
     response = {'message' : f'Transaction will be added to Block {index}'}
     return jsonify(response), 201
+    #return "We'll mine a new Block"
 
 @app.route('/chain', methods = ['GET'])
 def full_chain():
@@ -168,10 +235,39 @@ def full_chain():
         'length':len(blockchain.chain),
     }
     return jsonify(response),200
+    #return "We'll add a new transaction"
+
+@app.route('/nodes/register', methods = ['POST'])
+def register():
+    values = request.get_json()
+    required = ['nodes']
+    if not all(k in values for k in required):
+        return 'Missing values', 400
+    for i in values['nodes']:
+        blockchain.register_node(i)
+
+    response = {'message': f'New nodes have been added',
+                'total_nodes': list(blockchain.nodes)
+                }
+    return jsonify(response), 201
+
+
+@app.route('/nodes/resolve', methods = ['GET'])
+def resolve():
+    if blockchain.resolve_conflicts():
+        response = {
+            'message': "Our chain was replaced",
+            'new_chain': blockchain.chain,
+            'length': len(blockchain.chain),
+        }
+    else:
+        response = {
+            'message': "Our chain fail replaced"
+        }
+    return jsonify(response), 200
 
 if __name__ == '__main__':
-    app.run(host = '0.0.0.0', port = 5000)
-
+    app.run(host='0.0.0.0', port=5002)
 
 
 
