@@ -112,6 +112,14 @@ const isValidChain = (blockchainToValidate: Block[]):boolean => {
     return true;
 };
 
+const addBlockToChain = (newBlock: Block) => {
+    if(isValidNewBlock(newBlock, getLatestBlock())) {
+        blockchain.push(newBlock);
+        return true;
+    }
+    return false;
+};
+
 const replaceChain = (newBlocks: Block[]) => {
     // getBlockchain과 isValidChain을 사용
     // 새로운 chain이 유효한 chain이고 그 chain이 기존의 것보다 더 길면 교체.
