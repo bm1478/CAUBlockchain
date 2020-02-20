@@ -132,3 +132,6 @@ const replaceChain = (newBlocks: Block[]) => {
         console.log('Received blockchain invalid');
     }
 };
+
+
+export {Block, getBlockchain, getLatestBlock, generateNextBlock, isValidBlockStructure, replaceChain, addBlockToChain};
