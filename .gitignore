@@ -10,3 +10,6 @@
 /JSBlockchain/chapter4/node_modules/
 /JSBlockchain/chapter4/src/*.js
 /JSBlockchain/chapter4/src/*.map
+/JSBlockchain/chapter5/src/node_modules/
+/JSBlockchain/chapter5/src/*.js
+/JSBlockchain/chapter5/src/*.map
